@@ -9,10 +9,11 @@ A pure, framework-agnostic layout engine extracted from [@lkzhao/UIComponent](ht
 - Pure Swift implementation
 
 🌍 **RTL Support** - Full right-to-left layout
-- Automatic system language detection
-- RTL-aware components (RTLHStack, RTLVStack)
-- Position mirroring for RTL layouts
-- Seamless LTR/RTL switching
+- Zero-configuration: HStack/VStack automatically handle RTL
+- Automatic system locale detection
+- Full mirroring: child order, alignment semantics, leading/trailing insets
+- `DirectionProvider` for local direction override
+- App-level language switching with automatic layout refresh
 
 📡 **Automatic Refresh**
 - System RTL/language changes trigger layout updates
@@ -60,26 +61,27 @@ Or in Xcode: File → Add Packages → Enter the repository URL
 import LayoutEngine
 
 // Create a simple horizontal stack
+let engine = LayoutEngine()
 let layout = HStack(spacing: 8, alignItems: .center) {
     Text("Hello")
     Image(systemName: "star")
     Text("World")
 }
 
-// Calculate layout
+// Calculate layout — RTL is handled automatically based on system locale
 let constraint = Constraint(maxSize: CGSize(width: 300, height: 100))
-let renderNode = layout.layout(constraint)
+let renderNode = engine.performLayout(root: layout, constraint: constraint)
 
 print(renderNode.size)  // CGSize
 ```
 
-### RTL-Aware Layout
+### RTL-Aware Layout (Zero Configuration)
 
 ```swift
 import LayoutEngine
 
-// Automatically handles RTL based on system language
-let layout = RTLHStack(spacing: 16) {
+// HStack/VStack automatically handle RTL — no special components needed
+let layout = HStack(spacing: 16) {
     Image("profile")
     VStack(spacing: 4) {
         Text("John Doe")
@@ -87,8 +89,37 @@ let layout = RTLHStack(spacing: 16) {
     }
 }
 
-// Positions are automatically mirrored for RTL
-let renderNode = layout.layout(constraint)
+// On Arabic/Hebrew/Persian systems, positions are automatically mirrored
+let engine = LayoutEngine()
+let renderNode = engine.performLayout(root: layout, constraint: constraint)
+```
+
+### App-Level Language Switching
+
+```swift
+let engine = LayoutEngine()
+
+// Switch to Arabic — all layouts automatically refresh
+engine.updateLocale(Locale(identifier: "ar"))
+
+// Or set direction directly
+engine.updateDirection(.rtl)
+
+// Get notified when layout needs recalculation
+engine.onNeedsLayout = {
+    self.view.setNeedsLayout()
+}
+```
+
+### Local Direction Override
+
+```swift
+// Force a specific subtree to LTR (e.g., code block in RTL page)
+DirectionProvider(direction: .ltr) {
+    HStack(spacing: 4) {
+        Text("let x = 1")
+    }
+}
 ```
 
 ### UIView Integration with Auto-Refresh
@@ -101,15 +132,15 @@ class MyViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        // Create layout
+        // Create layout — RTL handled automatically
         let layout = HStack(spacing: 16) {
             Text("Hello")
             Spacer()
             Text("World")
         }
         
-        // Attach to view - automatic layout engine creation
-        view.layoutEngine.setComponent(layout)
+        // Attach to view
+        view.uiViewLayoutEngine.setComponent(layout)
         
         // Monitor changes (RTL, size)
         view.startLayoutMonitoring(
@@ -137,11 +168,11 @@ class MyViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        let layout = RTLHStack(spacing: 16) {
-            // Layout content
+        let layout = HStack(spacing: 16) {
+            // Layout content — automatically RTL-aware
         }
         
-        view.layoutEngine.setComponent(layout)
+        view.uiViewLayoutEngine.setComponent(layout)
         
         // Automatically monitor traitCollectionDidChange
         enableLayoutEngineRTLMonitoring { direction in
@@ -189,14 +220,12 @@ class MyViewController: NSViewController {
             }
         }
         
-        view.layoutEngine.setComponent(layout)
+        view.nsViewLayoutEngine.setComponent(layout)
         
         // Monitor size changes
-        view.startLayoutMonitoring(
-            onSizeChange: { size in
-                print("Size: \(size)")
-            }
-        )
+        view.startBoundsMonitoring { size in
+            print("Size: \(size)")
+        }
     }
 }
 #endif
@@ -227,11 +256,40 @@ The foundation of the layout system:
 ```swift
 public protocol Component {
     associatedtype R: RenderNode
-    func layout(_ constraint: Constraint) -> R
+    func layout(context: LayoutContext, constraint: Constraint) -> R
 }
 ```
 
-Every layout element implements this and returns a `RenderNode` with size/positions.
+Every layout element implements this. The `LayoutContext` carries environment information (direction, etc.) down the component tree.
+
+### LayoutContext
+
+Carries layout environment down the tree:
+
+```swift
+public struct LayoutContext {
+    public var direction: LayoutDirection
+    
+    public static var system: LayoutContext  // Auto-detect from system locale
+}
+```
+
+### LayoutEngine
+
+Manages root context, direction updates, and invalidation:
+
+```swift
+let engine = LayoutEngine()
+
+// Perform layout with automatic direction detection
+let result = engine.performLayout(root: myComponent, constraint: constraint)
+
+// Switch language at runtime
+engine.updateLocale(Locale(identifier: "ar"))
+
+// Get notified when layout needs refresh
+engine.onNeedsLayout = { /* re-layout */ }
+```
 
 ### Constraint
 
@@ -262,11 +320,23 @@ Represents layout direction with RTL detection:
 
 ```swift
 enum LayoutDirection {
-    case ltr  // Left-to-Right
-    case rtl  // Right-to-Left
+    case ltr   // Left-to-Right
+    case rtl   // Right-to-Left
+    case auto  // Inherit from context (default for all components)
     
-    static var current: LayoutDirection  // Auto-detect
+    static var current: LayoutDirection  // Auto-detect from system
     var isRTL: Bool
+}
+```
+
+### DirectionProvider
+
+Override direction for a subtree (rare — most code needs zero configuration):
+
+```swift
+DirectionProvider(direction: .ltr) {
+    // Children here always layout as LTR regardless of system locale
+    HStack { ... }
 }
 ```
 
@@ -288,24 +358,26 @@ VStack(spacing: 16, alignItems: .start) {
 }
 ```
 
-### RTL-Aware Stack Layouts
+### RTL Behavior
 
-**RTLHStack** - Horizontal with automatic RTL mirroring
+HStack and VStack handle RTL automatically — no special components needed:
+
 ```swift
-RTLHStack(spacing: 16, layoutDirection: .current) {
-    // Positions automatically mirrored for RTL
-    Text("مرحبا")  // Arabic
+// This single HStack works correctly in both LTR and RTL
+HStack(spacing: 16) {
+    Text("مرحبا")  // In RTL: positions mirrored, .start means right side
     Spacer()
     Image("icon")
 }
 ```
 
-**RTLVStack** - Vertical with RTL awareness
-```swift
-RTLVStack(spacing: 16, layoutDirection: .current) {
-    // children
-}
-```
+**HStack in RTL:**
+- Child positions are mirrored (first child at right, last at left)
+- `.start`/`.end` alignment semantics flip automatically
+
+**VStack in RTL:**
+- Cross-axis (horizontal) alignment flips: `.start` = right, `.end` = left
+- Main axis (vertical) is unaffected
 
 ### Alignment Options
 
@@ -324,14 +396,17 @@ enum CrossAxisAlignment {
 ### Spacing & Insets
 
 ```swift
-// Fixed insets
+// Physical insets (not affected by RTL)
 component.inset(UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16))
-
-// Convenient inset
-component.inset(h: 16, v: 12)  // horizontal: 16, vertical: 12
-
-// Equal inset
+component.inset(h: 16, v: 12)
 component.inset(16)
+
+// Directional insets (leading/trailing flip in RTL automatically)
+component.directionalInset(DirectionalEdgeInsets(
+    top: 16, bottom: 16, leading: 24, trailing: 8
+))
+// In LTR: leading=left(24), trailing=right(8)
+// In RTL: leading=right(24), trailing=left(8)
 ```
 
 ## Auto-Refresh System
@@ -378,9 +453,8 @@ Automatic refresh
 
 ```swift
 #if os(iOS) || os(tvOS)
-// Automatic layout engine attachment
 extension UIView {
-    var layoutEngine: LayoutEngine { /* ... */ }
+    var uiViewLayoutEngine: UIViewLayoutEngine { /* ... */ }
     
     func startLayoutMonitoring(
         onSizeChange: ((CGSize) -> Void)? = nil,
@@ -409,10 +483,10 @@ extension UIViewController {
 ```swift
 #if os(macOS)
 extension NSView {
-    var layoutEngine: LayoutEngine { /* ... */ }
+    var nsViewLayoutEngine: NSViewLayoutEngine { /* ... */ }
     
-    func startLayoutMonitoring(
-        onSizeChange: ((CGSize) -> Void)? = nil
+    func startBoundsMonitoring(
+        onBoundsChange: @escaping (CGSize) -> Void
     )
 }
 #endif
@@ -423,12 +497,13 @@ extension NSView {
 ```swift
 import SwiftUI
 
+@available(macOS 12.0, iOS 15.0, tvOS 15.0, *)
 struct LayoutEngineView: View {
     let component: any Component
-    @State var layoutDirection: LayoutDirection = .current
+    let engine: LayoutEngine
     
     var body: some View {
-        // Renders layout engine component
+        // Renders layout engine component with automatic RTL
     }
 }
 ```
@@ -441,15 +516,14 @@ import UIKit
 import LayoutEngine
 
 class MainViewController: UIViewController {
-    let contentLabel = UILabel()
-    let actionButton = UIButton()
+    let engine = LayoutEngine()
     
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        // Create RTL-aware layout
-        let layout = RTLVStack(spacing: 16) {
-            RTLHStack(spacing: 12) {
+        // No RTL-specific components needed — just use HStack/VStack
+        let layout = VStack(spacing: 16) {
+            HStack(spacing: 12) {
                 Image(systemName: "person.circle")
                 VStack(spacing: 4) {
                     Text("User Name")
@@ -458,18 +532,27 @@ class MainViewController: UIViewController {
                 Spacer()
             }
             
-            RTLHStack(spacing: 8) {
+            HStack(spacing: 8) {
                 Text("Some description text")
-            }.inset(h: 16, v: 8)
+            }.directionalInset(DirectionalEdgeInsets(
+                top: 8, bottom: 8, leading: 16, trailing: 16
+            ))
             
-            RTLHStack(spacing: 8) {
+            HStack(spacing: 8) {
                 Spacer()
                 Button("Action")
-            }.inset(h: 16)
+            }.directionalInset(DirectionalEdgeInsets(
+                leading: 16, trailing: 16
+            ))
         }.inset(16)
         
         // Attach and monitor
-        view.layoutEngine.setComponent(layout)
+        view.uiViewLayoutEngine.setComponent(layout)
+        
+        // Auto-refresh on locale/direction change
+        engine.onNeedsLayout = { [weak self] in
+            self?.view.setNeedsLayout()
+        }
         
         view.startLayoutMonitoring(
             onSizeChange: { size in
@@ -479,11 +562,12 @@ class MainViewController: UIViewController {
                 print("RTL mode: \(direction.isRTL)")
             }
         )
-        
-        // Global monitoring
-        LayoutChangeMonitor.shared.onLayoutDirectionChange { direction in
-            self.view.setNeedsLayout()
-        }
+    }
+    
+    // App-level language switch (e.g., from settings page)
+    func onLanguageChanged(to locale: Locale) {
+        engine.updateLocale(locale)
+        // That's it — engine triggers onNeedsLayout, all HStack/VStack auto-mirror
     }
 }
 #endif
@@ -526,10 +610,13 @@ Create custom layouts:
 struct CustomLayout: Component {
     let children: [any Component]
     
-    func layout(_ constraint: Constraint) -> some RenderNode {
-        let layoutResult = // ... your logic
-        return CustomRenderNode(
-            size: layoutResult.size,
+    func layout(context: LayoutContext, constraint: Constraint) -> BasicRenderNode {
+        // Access direction from context
+        let direction = context.resolvedDirection()
+        
+        // Your layout logic here...
+        return BasicRenderNode(
+            size: calculatedSize,
             children: childNodes,
             positions: positions
         )
