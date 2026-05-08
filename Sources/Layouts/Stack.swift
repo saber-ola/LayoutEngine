@@ -42,6 +42,7 @@ public struct HStack: Component, Stack, HorizontalLayoutProtocol {
     }
 
     public func layout(context: LayoutContext, constraint: Constraint) -> HStackRenderNode {
+        let resolvedDirection = context.resolvedDirection()
         var renderNodes: [any RenderNode] = []
 
         let childConstraint = Constraint(
@@ -90,6 +91,12 @@ public struct HStack: Component, Stack, HorizontalLayoutProtocol {
         let shouldFillPrimary = justifyContent != .start && primaryBound != .infinity
         let finalMain = max(shouldFillPrimary ? primaryBound : minPrimary, intrinsicMain)
 
+        if resolvedDirection.isRTL {
+            positions = positions.enumerated().map { (i, pos) in
+                CGPoint(x: finalMain - pos.x - renderNodes[i].size.width, y: pos.y)
+            }
+        }
+
         return HStackRenderNode(
             size: CGSize(width: finalMain, height: crossMax),
             children: renderNodes,
@@ -137,6 +144,7 @@ public struct VStack: Component, Stack, VerticalLayoutProtocol {
     }
 
     public func layout(context: LayoutContext, constraint: Constraint) -> VStackRenderNode {
+        let resolvedDirection = context.resolvedDirection()
         var renderNodes: [any RenderNode] = []
 
         let childConstraint = Constraint(
@@ -166,8 +174,10 @@ public struct VStack: Component, Stack, VerticalLayoutProtocol {
         var primaryOffset = offset
 
         for node in renderNodes {
+            let effectiveAlign = resolvedDirection.isRTL ? alignItems.mirrored : alignItems
+
             var crossValue: CGFloat = 0
-            switch alignItems {
+            switch effectiveAlign {
             case .start, .baselineFirst:
                 crossValue = 0
             case .end, .baselineLast:

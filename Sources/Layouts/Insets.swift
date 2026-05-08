@@ -14,7 +14,7 @@ public struct Insets: Component {
         let contentNode = content.layout(context: context, constraint: insetConstraint)
 
         return InsetRenderNode(
-            size: contentNode.size.inset(by: -insets),
+            size: contentNode.size.inset(by: insets),
             content: contentNode,
             insets: insets
         )
@@ -54,7 +54,7 @@ public struct DirectionalInsets: Component {
         let contentNode = content.layout(context: context, constraint: insetConstraint)
 
         return InsetRenderNode(
-            size: contentNode.size.inset(by: -uiInsets),
+            size: contentNode.size.inset(by: uiInsets),
             content: contentNode,
             insets: uiInsets
         )
