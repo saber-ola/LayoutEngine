@@ -1,48 +1,40 @@
 #if os(iOS) || os(tvOS) || os(macOS)
 import SwiftUI
 
-/// SwiftUI view that renders a LayoutEngine component
+@available(macOS 12.0, iOS 15.0, tvOS 15.0, *)
 public struct LayoutEngineView: View {
     let component: any Component
+    let engine: LayoutEngine
     @State private var size: CGSize = .zero
-    @State private var layoutDirection: LayoutDirection = .current
-    
-    public init(component: any Component) {
+
+    public init(component: any Component, engine: LayoutEngine = LayoutEngine()) {
         self.component = component
+        self.engine = engine
     }
-    
+
     public var body: some View {
         GeometryReader { geometry in
-            Canvas { context in
+            Canvas { context, size in
                 let constraint = Constraint(maxSize: geometry.size)
-                let renderNode = component.layout(constraint)
-                
-                // Render based on render node
+                let renderNode = engine.performLayout(root: AnyComponent(component), constraint: constraint)
                 renderComponent(renderNode, in: &context, at: .zero)
             }
             .onAppear {
                 size = geometry.size
             }
-            .onChange(of: geometry.size) { newSize in
-                size = newSize
-            }
         }
     }
-    
+
     private func renderComponent(
-        _ renderNode: any RenderNode,
+        _ renderNode: some RenderNode,
         in context: inout GraphicsContext,
         at position: CGPoint
     ) {
-        // This is a basic placeholder
-        // Actual rendering depends on component types
+        // Rendering implementation depends on component types
     }
 }
 
-// MARK: - SwiftUI Modifier
-
 extension View {
-    /// Apply layout direction to a view
     public func layoutDirection(_ direction: LayoutDirection) -> some View {
         #if os(iOS) || os(tvOS)
         return environment(\.layoutDirection, direction.isRTL ? .rightToLeft : .leftToRight)

@@ -31,9 +31,13 @@ public enum LayoutDirection: Hashable {
     /// Detects the current system layout direction
     public static var current: LayoutDirection {
         #if os(iOS) || os(tvOS)
-        return UIApplication.shared.userInterfaceLayoutDirection == .rightToLeft ? .rtl : .ltr
+        guard let app = UIApplication.value(forKey: "sharedApplication") as? UIApplication else {
+            return .ltr
+        }
+        return app.userInterfaceLayoutDirection == .rightToLeft ? .rtl : .ltr
         #elseif os(macOS)
-        return NSApp.userInterfaceLayoutDirection == .rightToLeft ? .rtl : .ltr
+        guard let app = NSApp else { return .ltr }
+        return app.userInterfaceLayoutDirection == .rightToLeft ? .rtl : .ltr
         #else
         return .ltr
         #endif
@@ -54,11 +58,18 @@ public enum LayoutDirection: Hashable {
             "ckb", // Central Kurdish
             "dv",  // Dhivehi
         ]
-        
-        if let languageCode = locale.language.languageCode?.identifier {
-            return rtlLanguages.contains(languageCode) ? .rtl : .ltr
+
+        let languageCode: String?
+        if #available(macOS 13, iOS 16, tvOS 16, watchOS 9, *) {
+            languageCode = locale.language.languageCode?.identifier
+        } else {
+            languageCode = locale.languageCode
         }
-        
+
+        if let code = languageCode {
+            return rtlLanguages.contains(code) ? .rtl : .ltr
+        }
+
         return .ltr
     }
     

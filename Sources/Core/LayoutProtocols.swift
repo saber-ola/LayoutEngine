@@ -2,26 +2,17 @@ import CoreGraphics
 
 // MARK: - Base Layout Protocol
 
-/// Base protocol for layout components
 public protocol BaseLayoutProtocol {
-    /// The type of render node this layout produces
     associatedtype R: RenderNode
-    
-    /// Performs the layout with the given constraint
-    func layout(_ constraint: Constraint) -> R
+    func layout(context: LayoutContext, constraint: Constraint) -> R
 }
 
 // MARK: - Axis Protocols
 
-/// Protocol for horizontal layout calculations
 public protocol HorizontalLayoutProtocol: BaseLayoutProtocol {
-    /// Returns the main (horizontal) value from a CGSize
     func main(_ size: CGSize) -> CGFloat
-    /// Returns the cross (vertical) value from a CGSize
     func cross(_ size: CGSize) -> CGFloat
-    /// Creates a CGSize from main and cross values
     func size(main: CGFloat, cross: CGFloat) -> CGSize
-    /// Creates a CGPoint from main and cross values
     func point(main: CGFloat, cross: CGFloat) -> CGPoint
 }
 
@@ -32,15 +23,10 @@ extension HorizontalLayoutProtocol {
     public func point(main: CGFloat, cross: CGFloat) -> CGPoint { CGPoint(x: main, y: cross) }
 }
 
-/// Protocol for vertical layout calculations
 public protocol VerticalLayoutProtocol: BaseLayoutProtocol {
-    /// Returns the main (vertical) value from a CGSize
     func main(_ size: CGSize) -> CGFloat
-    /// Returns the cross (horizontal) value from a CGSize
     func cross(_ size: CGSize) -> CGFloat
-    /// Creates a CGSize from main and cross values
     func size(main: CGFloat, cross: CGFloat) -> CGSize
-    /// Creates a CGPoint from main and cross values
     func point(main: CGFloat, cross: CGFloat) -> CGPoint
 }
 
@@ -53,7 +39,6 @@ extension VerticalLayoutProtocol {
 
 // MARK: - Alignment Enums
 
-/// Alignment options for the main axis
 public enum MainAxisAlignment: CaseIterable {
     case start
     case end
@@ -63,7 +48,19 @@ public enum MainAxisAlignment: CaseIterable {
     case spaceEvenly
 }
 
-/// Alignment options for the cross axis
+extension MainAxisAlignment {
+    public var mirrored: MainAxisAlignment {
+        switch self {
+        case .start: return .end
+        case .end: return .start
+        case .center: return .center
+        case .spaceBetween: return .spaceBetween
+        case .spaceAround: return .spaceAround
+        case .spaceEvenly: return .spaceEvenly
+        }
+    }
+}
+
 public enum CrossAxisAlignment: CaseIterable {
     case start
     case end
@@ -73,10 +70,22 @@ public enum CrossAxisAlignment: CaseIterable {
     case baselineLast
 }
 
+extension CrossAxisAlignment {
+    public var mirrored: CrossAxisAlignment {
+        switch self {
+        case .start: return .end
+        case .end: return .start
+        case .center: return .center
+        case .stretch: return .stretch
+        case .baselineFirst: return .baselineFirst
+        case .baselineLast: return .baselineLast
+        }
+    }
+}
+
 // MARK: - Layout Helper
 
 public struct LayoutHelper {
-    /// Calculates the offset and spacing for items based on justifyContent alignment
     public static func distribute(
         justifyContent: MainAxisAlignment,
         maxPrimary: CGFloat,
@@ -85,10 +94,10 @@ public struct LayoutHelper {
         numberOfItems: Int
     ) -> (offset: CGFloat, spacing: CGFloat) {
         guard numberOfItems > 0 else { return (0, minimumSpacing) }
-        
+
         let availableSpace = maxPrimary - totalPrimary
         let gaps = numberOfItems - 1
-        
+
         switch justifyContent {
         case .start:
             return (0, minimumSpacing)

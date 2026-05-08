@@ -1,3 +1,4 @@
+import Foundation
 import CoreGraphics
 
 public struct DirectionalEdgeInsets: Equatable {
