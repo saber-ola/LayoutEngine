@@ -10,14 +10,24 @@ import WatchKit
 
 /// Represents the layout direction (LTR or RTL)
 public enum LayoutDirection: Hashable {
-    case ltr  // Left-to-Right
-    case rtl  // Right-to-Left
+    case ltr   // Left-to-Right
+    case rtl   // Right-to-Left
+    case auto  // Inherit from context
     
     /// Returns true if the direction is RTL
     public var isRTL: Bool {
         self == .rtl
     }
-    
+
+    /// Resolves the layout direction, using the fallback for `.auto`
+    public func resolved(fallback: LayoutDirection) -> LayoutDirection {
+        switch self {
+        case .ltr: return .ltr
+        case .rtl: return .rtl
+        case .auto: return fallback == .auto ? .current : fallback
+        }
+    }
+
     /// Detects the current system layout direction
     public static var current: LayoutDirection {
         #if os(iOS) || os(tvOS)
